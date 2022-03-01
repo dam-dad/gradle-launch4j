@@ -6,8 +6,9 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
-    id "com.jfrog.artifactory" version "4.27.1"
+    //id "com.jfrog.artifactory" version "4.27.1"
     id 'org.unbroken-dome.test-sets' version '4.0.0'
+	id "io.codearte.nexus-staging" version "0.30.0"
 }
 
 // Write the plugin's classpath to a file to share with the tests.
@@ -56,13 +57,13 @@ dependencies {
     }
     testImplementation 'org.spockframework:spock-core'
     testImplementation 'org.spockframework:spock-junit4'
-    backwardsCompatibiltyTestImplementation sourceSets.test.output
+    // backwardsCompatibiltyTestImplementation sourceSets.test.output
 
     // Add the classpath file to the test runtime classpath.
-    testRuntimeOnly files(createClasspathManifest)
+    // testRuntimeOnly files(createClasspathManifest)
 }
 
-group "edu.sc.seis.launch4j"
+group "io.github.fvarrui"
 // use semantic versioning (http://semver.org/)
 version "2.5.2"
 
@@ -100,21 +101,21 @@ if (!project.hasProperty("artifactory_platform_user")) {
     ext.artifactory_platform_password = "password"
 }
 
-artifactory {
-    contextUrl = "https://boegl.jfrog.io/artifactory"
-    publish {
-        repository {
-            repoKey = 'snapshots-gradle-dev-local'
-            username = "${artifactory_platform_user}"
-            password = "${artifactory_platform_password}"
-            maven = true
-        }
-    }
-}
+//artifactory {
+//    contextUrl = "https://boegl.jfrog.io/artifactory"
+//    publish {
+//        repository {
+//            repoKey = 'snapshots-gradle-dev-local'
+//            username = "${artifactory_platform_user}"
+//            password = "${artifactory_platform_password}"
+//            maven = true
+//        }
+//    }
+//}
 //createReleaseTag.dependsOn publish
 
 wrapper {
-    gradleVersion = '7.3.3'
+    gradleVersion = '6.8.3'
     distributionType = Wrapper.DistributionType.ALL
 }
 
@@ -133,4 +134,88 @@ jacocoTestReport {
         csv.required = false
         html.outputLocation = layout.buildDirectory.dir('jacocoHtml')
     }
+}
+
+publishing {
+	publications {
+		mavenJava(MavenPublication) {
+			from(components.java)
+		}
+	}
+}
+
+if (project.hasProperty('release')) {
+	
+	task javadocJar(type: Jar) {
+		classifier = 'javadoc'
+		from javadoc
+	}
+	
+	task sources2Jar(type: Jar) {
+		classifier = 'sources'
+		from sourceSets.main.allSource
+	}
+	
+	artifacts {
+		archives javadocJar, sources2Jar
+	}
+
+	allprojects {
+		apply plugin: 'signing'
+		apply plugin: 'maven'
+
+		// Signature of artifacts
+		signing {
+			sign configurations.archives
+		}
+
+		// OSSRH publication
+		uploadArchives {
+			repositories {
+				mavenDeployer {
+					// POM signature
+					beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+					// Target repository
+					repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+						authentication(userName: ossrhUser, password: ossrhPassword)
+					}
+					pom.project {
+						name project.name
+						description 'A gradle-plugin that uses launch4j to create windows .exe files for java applications.'
+						url 'https://github.com/fvarrui/gradle-launch4j/'
+						scm {
+							url 'https://github.com/fvarrui/gradle-launch4j/'
+							connection 'scm:git:git://github.com/fvarrui/gradle-launch4j.git'
+							developerConnection 'scm:git:git@github.com:fvarrui/gradle-launch4j.git'
+						}
+						licenses {
+							license {
+								name 'Apache License, Version 2.0'
+								url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+								distribution 'repo'
+							}
+						}
+						developers {
+							developer {
+								id 'theboegl'
+								name 'Sebastian Bögl'
+								email 'info@sebastianboegl.de'
+							}
+						}
+						issueManagement {
+							system 'github'
+							url 'https://github.com/TheBoegl/gradle-launch4j/issues'
+						}
+					}
+				}
+			}
+		}
+
+	}
+	
+}
+	
+nexusStaging {
+	username = project.findProperty('ossrhUser') ?: ''
+	password = project.findProperty('ossrhPassword') ?: ''
 }
